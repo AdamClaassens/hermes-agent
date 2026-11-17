@@ -1476,15 +1476,12 @@ class CLITuiMixin:
         """Run immediate controls on the UI thread; True when handled.
 
         /model needs the prompt_toolkit terminal-handoff helpers of the interactive pickers.
-        /steer, /bg and /btw while the agent runs must not queue through _pending_input: the
-        process loop is blocked inside self.chat(), so they would only run after the foreground
-        turn — turning /steer into a next-turn message (defeating mid-run injection, #34569) and
-        starting the /bg side task after the turn it should run alongside (#75221). The
-        foreground turn is left alone: no interrupt, no steer. agent.steer() is thread-safe.
+        /steer, /bg and /btw bypass the worker blocked in self.chat(): queuing would defer
+        mid-run steering (#34569) and background tasks (#75221) until after the turn.
+        agent.steer() is thread-safe; the foreground turn is not interrupted.
 
-        Every branch invalidates after reset: process_command() prints through patch_stdout
-        and never invalidates the app, so the just-cleared input area would keep showing the
-        submitted text (looking unsent, inviting a re-submit) until some unrelated redraw.
+        Every branch resets and invalidates: process_command() prints through patch_stdout
+        without redrawing, leaving submitted text visible and inviting duplicate submissions.
         /voice off must also bypass the worker: it can be draining speech after generation,
         and disabling playback must not wait for that speech or interrupt the text turn.
         """

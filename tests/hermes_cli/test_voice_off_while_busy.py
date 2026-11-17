@@ -19,6 +19,8 @@ def _surface(monkeypatch):
     cli._voice_tts_done = threading.Event()
     cli._pending_input = queue.Queue()
     cli._attached_images = []
+    cli._tui_enter_overlay = lambda _event: False
+    cli._tui_multiline_shortcuts = False
     cli._inline_pastes = lambda _buf: None
     cli._tts_lease_async = lambda _active: None
     # Exercise the real voice handler after routing, without an agent/transport.
@@ -33,7 +35,7 @@ def test_voice_off_cuts_speech_before_busy_worker_returns(monkeypatch, command):
     cli, playback_stopped = _surface(monkeypatch)
     buffer = MagicMock(text=command)
     event = SimpleNamespace(app=SimpleNamespace(current_buffer=buffer, invalidate=lambda: None))
-    cli._tui_submit_buffer(event, buffer)
+    cli._tui_handle_enter(event)
     assert playback_stopped.is_set()
     assert cli._voice_tts_stop.is_set() and cli._voice_tts_done.is_set()
     assert not cli._voice_mode and not cli._voice_tts and not cli._voice_continuous
@@ -46,6 +48,6 @@ def test_other_voice_commands_keep_normal_queued_dispatch(monkeypatch, command):
     cli, playback_stopped = _surface(monkeypatch)
     buffer = MagicMock(text=command)
     event = SimpleNamespace(app=SimpleNamespace(current_buffer=buffer, invalidate=lambda: None))
-    cli._tui_submit_buffer(event, buffer)
+    cli._tui_handle_enter(event)
     assert not playback_stopped.is_set()
     assert cli._pending_input.get_nowait() == command
