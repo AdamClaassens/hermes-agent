@@ -1473,18 +1473,17 @@ class CLITuiMixin:
         buf.reset(append_to_history=True)
 
     def _tui_enter_inline_command(self, event, text: str, has_images: bool) -> bool:
-        """Run /model, /steer, /bg, /btw directly on the UI thread; True when handled.
+        """Run immediate controls on the UI thread; True when handled.
 
         /model needs the prompt_toolkit terminal-handoff helpers of the interactive pickers.
-        /steer, /bg and /btw while the agent runs must not queue through _pending_input: the
-        process loop is blocked inside self.chat(), so they would only run after the foreground
-        turn — turning /steer into a next-turn message (defeating mid-run injection, #34569) and
-        starting the /bg side task after the turn it should run alongside (#75221). The
-        foreground turn is left alone: no interrupt, no steer. agent.steer() is thread-safe.
+        /steer, /bg and /btw bypass the worker blocked in self.chat(): queuing would defer
+        mid-run steering (#34569) and background tasks (#75221) until after the turn.
+        agent.steer() is thread-safe; the foreground turn is not interrupted.
 
-        Every branch invalidates after reset: process_command() prints through patch_stdout
-        and never invalidates the app, so the just-cleared input area would keep showing the
-        submitted text (looking unsent, inviting a re-submit) until some unrelated redraw.
+        Every branch resets and invalidates: process_command() prints through patch_stdout
+        without redrawing, leaving submitted text visible and inviting duplicate submissions.
+        /voice off must also bypass the worker: it can be draining speech after generation,
+        and disabling playback must not wait for that speech or interrupt the text turn.
         """
         if self._should_handle_model_command_inline(text, has_images=has_images):
             if not self.process_command(text):
@@ -1493,7 +1492,8 @@ class CLITuiMixin:
                     event.app.exit()
         elif (self._should_handle_steer_command_inline(text, has_images=has_images)
               or self._should_handle_background_command_inline(text, has_images=has_images)
-              or self._should_handle_stop_command_inline(text, has_images=has_images)):
+              or self._should_handle_stop_command_inline(text, has_images=has_images)
+              or (not has_images and text.lower().split() == ["/voice", "off"])):
             self.process_command(text)
         else:
             return False

@@ -1107,7 +1107,11 @@ def _run_system_player(cmd: list[str]) -> bool:
         _set_active_playback(proc)
         proc.wait(timeout=300)
         rc = proc.returncode
-        if rc == 0:
+        with _playback_lock:
+            interrupted = _active_playback is not proc
+        # stop_playback clears the owner before terminating it. A deliberate stop
+        # ends playback; treating it as a failed player would replay via a fallback.
+        if rc == 0 or interrupted:
             return True
         # e.g. WSL ffplay/aplay with no audio device — fall through to the next player.
         logger.debug("System player %s exited with code %d, trying next", cmd[0], rc)
